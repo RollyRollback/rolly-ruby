@@ -2,7 +2,7 @@ class ActionState
   attr_accessor :result
 
   def initialize
-    @result = nil
+    @result = true
     @state = {}
   end
 

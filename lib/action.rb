@@ -16,10 +16,10 @@ class Action
     unless execute_steps
       return false if rollback
 
-      raise StandardError, 'rollback failed', backtrace
+      raise RollbackFailedError, 'rollback failed'
     end
 
-    state.result || true
+    state.result
   end
 
   def pop(num_of_steps = 1)
@@ -33,7 +33,7 @@ class Action
   attr_reader :execution_steps, :retries, :state
   attr_accessor :last_attempted_step
 
-  #XXX(sunny-b): uncomment this method when ready to incorporate retries
+  # XXX(sunny-b): uncomment this method when ready to incorporate retries
   # def successful?(step_action)
   #   max_retries = contains_retries?(step) ? step.retries : retries
   #   attempts ||= 0

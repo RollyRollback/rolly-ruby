@@ -1,21 +1,42 @@
 require 'action'
 require 'action_state'
+require_relative '../errors/rollback_failed'
 
 describe Action do
-  let(:retries) { 0 }
   let(:state) { ActionState.new }
   let(:steps) { [] }
+
   let(:execute) { true }
-  let(:fallback) { true }
+  let(:execute_lambda) { ->(state) { execute } }
+  let(:rollback) { true }
+  let(:rollback_lambda) { ->(state) { rollback } }
   let(:rollback_on_failure) { false }
+  let(:retries) { 0 }
 
   let(:step) do
     double(
       :action_step,
-      execute: ->(_) { execute },
-      rollback: ->(_) { fallback },
+      execute: execute_lambda,
+      rollback: rollback_lambda,
       retries: retries,
       rollback_on_failed_attempt?: rollback_on_failure
+    )
+  end
+
+  let(:execute2) { true }
+  let(:execute_lambda2) { ->(state) { execute2 } }
+  let(:rollback2) { true }
+  let(:rollback_lambda2) { ->(state) { rollback2 } }
+  let(:rollback_on_failure2) { false }
+  let(:retries2) { 0 }
+
+  let(:step2) do
+    double(
+      :action_step,
+      execute: execute_lambda2,
+      rollback: rollback_lambda2,
+      retries: retries2,
+      rollback_on_failed_attempt?: rollback_on_failure2
     )
   end
 
@@ -109,6 +130,52 @@ describe Action do
       end
     end
 
+    context 'two successful steps without result' do
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'returns true' do
+        expect(@action.execute).to be true
+      end
+
+      it 'calls execute on the step' do
+        expect(step).to receive(:execute).once
+        expect(step2).to receive(:execute).once
+        @action.execute
+      end
+    end
+
+    context 'two successful steps with result' do
+      let(:execute2) { state.result = 'test'; true }
+
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'returns the state result' do
+        expect(@action.execute).to eq('test')
+      end
+
+      it 'calls execute on the step twice' do
+        expect(step).to receive(:execute).once
+        expect(step2).to receive(:execute).once
+        @action.execute
+      end
+    end
+
+    context 'single successful step with result' do
+      let(:execute) { state.result = 'test'; true }
+
+      before do
+        @action.add(step)
+      end
+
+      it 'returns the state result' do
+        expect(@action.execute).to eq('test')
+      end
+    end
+
     context 'single failure step without rollback' do
       let(:execute) { false }
 
@@ -151,6 +218,120 @@ describe Action do
       it 'calls rollback_on_failed_attempt? on the step' do
         expect(step).to receive(:rollback_on_failed_attempt?).and_return(true).once
         @action.execute
+      end
+    end
+
+    context 'single failure step with failed rollback' do
+      let(:execute) { false }
+      let(:rollback) { false }
+      let(:rollback_on_failure) { true }
+
+      before do
+        @action.add(step)
+      end
+
+      it 'raises rollback failed error' do
+        expect { @action.execute }.to raise_error RollbackFailedError
+      end
+    end
+
+    context 'single failure step with errored rollback' do
+      let(:execute) { false }
+      let(:rollback) { raise StandardError }
+      let(:rollback_on_failure) { true }
+
+      before do
+        @action.add(step)
+      end
+
+      it 'raises rollback failed error' do
+        expect { @action.execute }.to raise_error RollbackFailedError
+      end
+    end
+
+    context 'two steps with single failure step' do
+      let(:execute) { false }
+
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'returns false' do
+        expect(@action.execute).to be false
+      end
+
+      it 'does not call rollback on the step' do
+        expect(step).not_to receive(:rollback)
+        expect(step2).not_to receive(:rollback)
+        @action.execute
+      end
+
+      it 'calls rollback_on_failed_attempt? on the step' do
+        expect(step).to receive(:rollback_on_failed_attempt?).and_return(false).once
+        @action.execute
+      end
+    end
+
+    context 'two steps with second step failure' do
+      let(:execute2) { false }
+
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'returns false' do
+        expect(@action.execute).to be false
+      end
+
+      it 'calls rollback on the first step' do
+        expect(step).to receive(:rollback)
+        @action.execute
+      end
+
+      it 'does not call rollback on second step' do
+        expect(step2).not_to receive(:rollback)
+        @action.execute
+      end
+
+      it 'calls rollback_on_failed_attempt? on the step' do
+        expect(step2).to receive(:rollback_on_failed_attempt?).and_return(false).once
+        @action.execute
+      end
+    end
+
+    context 'two steps with second step failure and rollback' do
+      let(:execute2) { false }
+      let(:rollback_on_failure2) { true }
+
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'returns false' do
+        expect(@action.execute).to be false
+      end
+
+      it 'calls rollback on the first step' do
+        expect(step).to receive(:rollback)
+        @action.execute
+      end
+
+      it 'calls rollback on second step' do
+        expect(step2).to receive(:rollback)
+        @action.execute
+      end
+    end
+
+    context 'two steps with second step failure and rollback failure' do
+      let(:execute2) { false }
+      let(:rollback) { false }
+
+      before do
+        @action.add(step, step2)
+      end
+
+      it 'raises rollback failed error' do
+        expect { @action.execute }.to raise_error RollbackFailedError
       end
     end
   end
