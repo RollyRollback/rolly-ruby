@@ -1,6 +1,6 @@
 require 'action'
 require 'action_state'
-require_relative '../errors/rollback_failed'
+require_relative '../lib/errors/rollback_failed'
 
 describe Action do
   let(:state) { ActionState.new }
@@ -332,6 +332,89 @@ describe Action do
 
       it 'raises rollback failed error' do
         expect { @action.execute }.to raise_error RollbackFailedError
+      end
+    end
+
+    context 'with retries' do
+      let(:retries) { 2 }
+      let(:retries2) { 2 }
+
+      context 'single successful step (2 retries)' do
+        let(:execute_lambda) do
+          lambda do |state|
+            state.set(:count, 1) if state.get(:count).nil?
+
+            if state.get(:count) < 3
+              state.set(:count, state.get(:count) + 1)
+              return false
+            end
+
+            true
+          end
+        end
+
+        before { @action.add(step) }
+
+        it 'returns true' do
+          expect(@action.execute).to be true
+        end
+
+        it 'calls the execute block multiple times' do
+          expect(step.execute).to receive(:call).exactly(3).times
+          @action.execute
+        end
+      end
+
+      context 'single successful step (2 raised errors)' do
+        let(:execute_lambda) do
+          lambda do |state|
+            state.set(:count, 1) if state.get(:count).nil?
+
+            if state.get(:count) < 3
+              state.set(:count, state.get(:count) + 1)
+              raise StandardError
+            end
+
+            true
+          end
+        end
+
+        before { @action.add(step) }
+
+        it 'returns true' do
+          expect(@action.execute).to be true
+        end
+
+        it 'calls the execute block multiple times' do
+          expect(step.execute).to receive(:call).exactly(3).times
+          @action.execute
+        end
+      end
+
+      context 'two successful steps (2 retries)' do
+        let(:execute_lambda2) do
+          lambda do |state|
+            state.set(:count, 1) if state.get(:count).nil?
+
+            if state.get(:count) < 3
+              state.set(:count, state.get(:count) + 1)
+              return false
+            end
+
+            true
+          end
+        end
+
+        before { @action.add(step, step2) }
+
+        it 'returns true' do
+          expect(@action.execute).to be true
+        end
+
+        it 'calls the execute block multiple times on second step' do
+          expect(step2.execute).to receive(:call).exactly(3).times
+          @action.execute
+        end
       end
     end
   end

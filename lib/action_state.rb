@@ -1,9 +1,9 @@
 class ActionState
   attr_accessor :result
 
-  def initialize
+  def initialize(state = {})
     @result = true
-    @state = {}
+    @state = state
   end
 
   def set(key, val)

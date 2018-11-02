@@ -1,7 +1,7 @@
 class Step
   attr_reader :retries, :execute, :rollback
 
-  def initialize(execute:, rollback:, retries: 0, rollback_on_failed_attempt: false)
+  def initialize(execute:, rollback:, retries: -1, rollback_on_failed_attempt: false)
     @execute = execute
     @rollback = rollback
     @retries = retries
